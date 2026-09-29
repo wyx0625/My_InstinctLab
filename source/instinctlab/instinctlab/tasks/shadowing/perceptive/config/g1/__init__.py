@@ -45,3 +45,27 @@ gym.register(
         "instinct_rl_cfg_entry_point": f"{agents.__name__}.instinct_rl_vae_cfg:G1PerceptiveVaePPORunnerCfg",
     },
 )
+
+gym.register(
+    id="Instinct-Perceptive-Shadowing-CircularHole-G1-v0",
+    entry_point="instinctlab.envs:InstinctRlEnv",
+    disable_env_checker=True,
+    kwargs={
+        "env_cfg_entry_point": f"{task_entry}.circular_hole_shadowing_cfg:G1CircularHoleShadowingEnvCfg",
+        "instinct_rl_cfg_entry_point": (
+            f"{agents.__name__}.instinct_rl_ppo_cfg:G1CircularHoleShadowingPPORunnerCfg"
+        ),
+    },
+)
+
+gym.register(
+    id="Instinct-Perceptive-Shadowing-CircularHole-G1-Play-v0",
+    entry_point="instinctlab.envs:InstinctRlEnv",
+    disable_env_checker=True,
+    kwargs={
+        "env_cfg_entry_point": f"{task_entry}.circular_hole_shadowing_cfg:G1CircularHoleShadowingEnvCfg_PLAY",
+        "instinct_rl_cfg_entry_point": (
+            f"{agents.__name__}.instinct_rl_ppo_cfg:G1CircularHoleShadowingPPORunnerCfg"
+        ),
+    },
+)

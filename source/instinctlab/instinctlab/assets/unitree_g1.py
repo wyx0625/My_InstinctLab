@@ -50,14 +50,18 @@ joint name order:
 
 G1_29DOF_TORSOBASE_CFG = G1_CFG.copy()
 G1_29DOF_TORSOBASE_CFG.spawn = sim_utils.UrdfFileCfg(
-    asset_path=os.path.join(__file_dir__, "resources/unitree_g1/urdf/g1_29dof_torsobase_simplified.urdf"),
+    asset_path=os.path.join(
+        __file_dir__, "resources/unitree_g1/urdf/g1_29dof_torsobase_simplified.urdf"
+    ),
     replace_cylinders_with_capsules=False,
     merge_fixed_joints=False,
     fix_base=False,
     self_collision=True,
     activate_contact_sensors=True,
 )
-G1_29DOF_TORSOBASE_CFG.spawn.joint_drive.gains.stiffness = None  # use value from the URDF file
+G1_29DOF_TORSOBASE_CFG.spawn.joint_drive.gains.stiffness = (
+    None  # use value from the URDF file
+)
 G1_29DOF_TORSOBASE_CFG.soft_joint_pos_limit_factor = 0.95
 G1_29DOF_TORSOBASE_CFG.actuators = {
     # NOTE: checked, delayed PD actuator has same time-lag when computing torques; and no lag when
@@ -172,7 +176,9 @@ G1_29DOF_TORSOBASE_CFG.init_state.joint_pos = {
 
 G1_29DOF_TORSOBASE_CLOG_CFG = G1_29DOF_TORSOBASE_CFG.copy()
 G1_29DOF_TORSOBASE_CLOG_CFG.spawn = sim_utils.UrdfFileCfg(
-    asset_path=os.path.join(__file_dir__, "resources/unitree_g1/urdf/g1_29dof_torsobase_clog.urdf"),
+    asset_path=os.path.join(
+        __file_dir__, "resources/unitree_g1/urdf/g1_29dof_torsobase_clog.urdf"
+    ),
     replace_cylinders_with_capsules=False,
     merge_fixed_joints=False,
     fix_base=False,
@@ -180,7 +186,9 @@ G1_29DOF_TORSOBASE_CLOG_CFG.spawn = sim_utils.UrdfFileCfg(
     activate_contact_sensors=True,
     collider_type="convex_decomposition",
 )
-G1_29DOF_TORSOBASE_CLOG_CFG.spawn.joint_drive.gains.stiffness = None  # use value from the URDF file
+G1_29DOF_TORSOBASE_CLOG_CFG.spawn.joint_drive.gains.stiffness = (
+    None  # use value from the URDF file
+)
 
 G1_29Dof_TorsoBase_symmetric_augmentation_joint_mapping = [
     1,
@@ -549,10 +557,14 @@ G1_29DOF_TORSOBASE_POPSICLE_CFG = ArticulationCfg(
             max_depenetration_velocity=1.0,
         ),
         articulation_props=sim_utils.ArticulationRootPropertiesCfg(
-            enabled_self_collisions=True, solver_position_iteration_count=8, solver_velocity_iteration_count=4
+            enabled_self_collisions=True,
+            solver_position_iteration_count=8,
+            solver_velocity_iteration_count=4,
         ),
         joint_drive=sim_utils.UrdfConverterCfg.JointDriveCfg(
-            gains=sim_utils.UrdfConverterCfg.JointDriveCfg.PDGainsCfg(stiffness=0, damping=0)
+            gains=sim_utils.UrdfConverterCfg.JointDriveCfg.PDGainsCfg(
+                stiffness=0, damping=0
+            )
         ),
     ),
     init_state=ArticulationCfg.InitialStateCfg(
@@ -571,6 +583,11 @@ G1_29DOF_TORSOBASE_POPSICLE_CFG = ArticulationCfg(
     ),
     soft_joint_pos_limit_factor=0.9,
     actuators=beyondmimic_g1_29dof_actuators,
+)
+
+G1_29DOF_PELVISBASE_CFG = G1_29DOF_TORSOBASE_POPSICLE_CFG.copy()
+G1_29DOF_PELVISBASE_CFG.spawn.asset_path = (
+    f"{__file_dir__}/resources/unitree_g1/g1_29dof.urdf"
 )
 
 G1_29DOF_LINKS = [  # Order not guaranteed.

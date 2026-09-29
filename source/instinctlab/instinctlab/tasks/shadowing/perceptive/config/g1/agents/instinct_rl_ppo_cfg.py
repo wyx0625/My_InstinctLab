@@ -89,3 +89,8 @@ class G1PerceptiveShadowingPPORunnerCfg(InstinctRlOnPolicyRunnerCfg):
                 f"_GPU{os.environ.get('CUDA_VISIBLE_DEVICES')}" if "CUDA_VISIBLE_DEVICES" in os.environ else "",
             ]
         )
+
+
+@configclass
+class G1CircularHoleShadowingPPORunnerCfg(G1PerceptiveShadowingPPORunnerCfg):
+    experiment_name = "g1_circular_hole_shadowing"

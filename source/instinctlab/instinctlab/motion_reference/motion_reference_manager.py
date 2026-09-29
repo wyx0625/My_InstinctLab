@@ -94,15 +94,19 @@ class MotionReferenceManager(SensorBase):
         (Acquired passively)
         """
         outdated_mask = torch.logical_or(
-            (self._reference_frame_timestamp - self._timestamp).abs() > 1e-6, self._reference_frame_timestamp < 1e-6
+            (self._reference_frame_timestamp - self._timestamp).abs() > 1e-6,
+            self._reference_frame_timestamp < 1e-6,
         )
         if outdated_mask.any():
             env_ids_to_update = self._ALL_INDICES[outdated_mask]
             for name, buffer in self._motion_buffers.items():
                 env_ids_assignment = self._motion_buffer_assignment[name]
-                assert env_ids_assignment.step is None, "Only support continuous env_ids assignment for now."
+                assert env_ids_assignment.step is None, (
+                    "Only support continuous env_ids assignment for now."
+                )
                 env_ids_this_buffer_mask = torch.logical_and(
-                    env_ids_to_update >= env_ids_assignment.start, env_ids_to_update < env_ids_assignment.stop
+                    env_ids_to_update >= env_ids_assignment.start,
+                    env_ids_to_update < env_ids_assignment.stop,
                 )
                 env_ids_this_buffer = env_ids_to_update[env_ids_this_buffer_mask]
                 buffer.fill_motion_data(
@@ -113,9 +117,15 @@ class MotionReferenceManager(SensorBase):
                 )
                 # symmetric augment init reference state if needed
                 if self._symmetric_augmentation_conditions_met:
-                    env_ids_to_augment = env_ids_this_buffer[self._env_symmetric_augmentation_mask[env_ids_this_buffer]]
-                    self._symmetric_augment_reference_data(self._reference_frame, env_ids_to_augment)
-            self._reference_frame_timestamp[outdated_mask] = self._timestamp[outdated_mask]
+                    env_ids_to_augment = env_ids_this_buffer[
+                        self._env_symmetric_augmentation_mask[env_ids_this_buffer]
+                    ]
+                    self._symmetric_augment_reference_data(
+                        self._reference_frame, env_ids_to_augment
+                    )
+            self._reference_frame_timestamp[outdated_mask] = self._timestamp[
+                outdated_mask
+            ]
         return self._reference_frame
 
     @property
@@ -124,9 +134,15 @@ class MotionReferenceManager(SensorBase):
         we compute a reference base position matching robot's x-y position but no z position.
         Shape: (num_envs, 3)
         """
-        if ((self._reference_relative_base_pos.timestamp - self._timestamp).abs() > 1e-6).any():
-            self._reference_relative_base_pos.data = self._view.get_root_transforms().clone()[:, :3]
-            self._reference_relative_base_pos.data[:, 2] = self.reference_frame.base_pos_w[:, 0, 2]
+        if (
+            (self._reference_relative_base_pos.timestamp - self._timestamp).abs() > 1e-6
+        ).any():
+            self._reference_relative_base_pos.data = (
+                self._view.get_root_transforms().clone()[:, :3]
+            )
+            self._reference_relative_base_pos.data[:, 2] = (
+                self.reference_frame.base_pos_w[:, 0, 2]
+            )
             self._reference_relative_base_pos.timestamp = self._timestamp.clone()
         return self._reference_relative_base_pos.data
 
@@ -137,8 +153,13 @@ class MotionReferenceManager(SensorBase):
         Any world-frame rotation in the motion reference left-multiply by this quat will get the robot's relative frame position.
         Shape: (num_envs, 4)
         """
-        if ((self._reference_relative_delta_quat.timestamp - self._timestamp).abs() > 1e-6).any():
-            _view_quat = math_utils.convert_quat(self._view.get_root_transforms().clone()[:, 3:7], to="wxyz")
+        if (
+            (self._reference_relative_delta_quat.timestamp - self._timestamp).abs()
+            > 1e-6
+        ).any():
+            _view_quat = math_utils.convert_quat(
+                self._view.get_root_transforms().clone()[:, 3:7], to="wxyz"
+            )
             self._reference_relative_delta_quat.data = math_utils.yaw_quat(
                 math_utils.quat_mul(
                     _view_quat,
@@ -154,7 +175,10 @@ class MotionReferenceManager(SensorBase):
         joint_pos / roll-pitch remains the same, the links' position in the world frame.
         Shape: (num_envs, num_links, 3)
         """
-        if ((self._reference_link_pos_relative_w.timestamp - self._timestamp).abs() > 1e-6).any():
+        if (
+            (self._reference_link_pos_relative_w.timestamp - self._timestamp).abs()
+            > 1e-6
+        ).any():
             delta_quat = self.reference_relative_delta_quat.unsqueeze(1).expand(
                 -1,
                 self.num_link_of_interests,
@@ -184,7 +208,10 @@ class MotionReferenceManager(SensorBase):
         (w, x, y, z) format.
         Shape: (num_envs, num_links, 4)
         """
-        if ((self._reference_link_quat_relative_w.timestamp - self._timestamp).abs() > 1e-6).any():
+        if (
+            (self._reference_link_quat_relative_w.timestamp - self._timestamp).abs()
+            > 1e-6
+        ).any():
             self._reference_link_quat_relative_w.data = math_utils.quat_mul(
                 self.reference_relative_delta_quat.unsqueeze(1).expand(
                     -1,
@@ -249,7 +276,8 @@ class MotionReferenceManager(SensorBase):
         """
         return torch.where(
             self._timestamp > self._timestamp_last_update,
-            (torch.clip(self.time_passed_from_update, min=0.0) % self.frame_interval_s) < 1e-6,
+            (torch.clip(self.time_passed_from_update, min=0.0) % self.frame_interval_s)
+            < 1e-6,
             torch.zeros_like(self._timestamp, dtype=torch.bool),
         )
 
@@ -277,12 +305,16 @@ class MotionReferenceManager(SensorBase):
     @property
     def time_to_aiming_frame(self) -> torch.Tensor:
         # The time left to reach the aiming frame
-        return (self.aiming_frame_idx + 1) * self.frame_interval_s - (self.time_passed_from_update)
+        return (self.aiming_frame_idx + 1) * self.frame_interval_s - (
+            self.time_passed_from_update
+        )
 
     @property
     def env_origins(self) -> torch.Tensor:
         return (
-            self._env_origins if hasattr(self, "_env_origins") else torch.zeros(self._view.count, 3, device=self.device)
+            self._env_origins
+            if hasattr(self, "_env_origins")
+            else torch.zeros(self._view.count, 3, device=self.device)
         )
 
     @property
@@ -293,7 +325,10 @@ class MotionReferenceManager(SensorBase):
     @property
     def _motion_buffer_num_trajectories(self) -> dict[str, int]:
         """Get the number of trajectories for each motion buffer as (a private, online, class property)."""
-        return {name: buffer.num_trajectories for name, buffer in self._motion_buffers.items()}
+        return {
+            name: buffer.num_trajectories
+            for name, buffer in self._motion_buffers.items()
+        }
 
     @property
     def complete_motion_lengths(self) -> torch.Tensor:
@@ -329,9 +364,9 @@ class MotionReferenceManager(SensorBase):
 
     def reset(self, env_ids: Sequence[int] | torch.Tensor | None = None):
         """Reset the motion reference manager as a sensor, also reset the motion reference components."""
-        assert (
-            self.is_initialized
-        ), "Motion reference manager is not initialized successfully. Please check the error message above."
+        assert self.is_initialized, (
+            "Motion reference manager is not initialized successfully. Please check the error message above."
+        )
         super().reset(env_ids)
         if env_ids is None:
             env_ids = self.ALL_INDICES
@@ -343,7 +378,10 @@ class MotionReferenceManager(SensorBase):
         self._resample_update_period(env_ids)
 
     def find_joints(
-        self, name_keys: str | Sequence[str], joint_subset: list[str] | None = None, preserve_order: bool = False
+        self,
+        name_keys: str | Sequence[str],
+        joint_subset: list[str] | None = None,
+        preserve_order: bool = False,
     ) -> tuple[list[int], list[str]]:
         """Return the joint_ids of the given joint names. To meet the same interface with the isaaclab SceneEntity.
 
@@ -362,26 +400,38 @@ class MotionReferenceManager(SensorBase):
         if joint_subset is None:
             joint_subset = self.isaac_joint_names
         # find joints
-        return string_utils.resolve_matching_names(name_keys, joint_subset, preserve_order)
+        return string_utils.resolve_matching_names(
+            name_keys, joint_subset, preserve_order
+        )
 
-    def find_bodies(self, name_keys: str | Sequence[str], preserve_order: bool = False) -> tuple[list[int], list[str]]:
+    def find_bodies(
+        self, name_keys: str | Sequence[str], preserve_order: bool = False
+    ) -> tuple[list[int], list[str]]:
         """Return the link_ids of the given link names. To meet the same interface with the isaaclab SceneEntity.
         NOTE: This ids are selections across self.cfg.link_of_interests. Not the entire link ids in the articulation.
         """
         # find bodies
-        return string_utils.resolve_matching_names(name_keys, self.cfg.link_of_interests, preserve_order)
+        return string_utils.resolve_matching_names(
+            name_keys, self.cfg.link_of_interests, preserve_order
+        )
 
-    def get_init_reference_state(self, env_ids: Sequence[int] | torch.Tensor | None = None) -> MotionReferenceState:
+    def get_init_reference_state(
+        self, env_ids: Sequence[int] | torch.Tensor | None = None
+    ) -> MotionReferenceState:
         """Get the initial reference state for the given env_ids."""
         env_ids = torch.as_tensor(env_ids, device=self.device)
         for name, buffer in self._motion_buffers.items():
             env_ids_assignment = self._motion_buffer_assignment[name]
-            assert env_ids_assignment.step is None, "Only support continuous env_ids assignment for now."
+            assert env_ids_assignment.step is None, (
+                "Only support continuous env_ids assignment for now."
+            )
             env_ids_this_buffer_mask = torch.logical_and(
                 env_ids >= env_ids_assignment.start, env_ids < env_ids_assignment.stop
             )
             env_ids_this_buffer = (
-                self.ALL_INDICES[env_ids_assignment] if env_ids is None else env_ids[env_ids_this_buffer_mask]
+                self.ALL_INDICES[env_ids_assignment]
+                if env_ids is None
+                else env_ids[env_ids_this_buffer_mask]
             )
             buffer.fill_init_reference_state(
                 env_ids_this_buffer,
@@ -390,24 +440,36 @@ class MotionReferenceManager(SensorBase):
             )
             # symmetric augment init reference state if needed
             if self._symmetric_augmentation_conditions_met:
-                env_ids_to_augment = env_ids_this_buffer[self._env_symmetric_augmentation_mask[env_ids_this_buffer]]
-                self._init_reference_state.joint_pos[env_ids_to_augment] = self._symmetric_augment_joint_buffer(
-                    self._init_reference_state.joint_pos[env_ids_to_augment],
+                env_ids_to_augment = env_ids_this_buffer[
+                    self._env_symmetric_augmentation_mask[env_ids_this_buffer]
+                ]
+                self._init_reference_state.joint_pos[env_ids_to_augment] = (
+                    self._symmetric_augment_joint_buffer(
+                        self._init_reference_state.joint_pos[env_ids_to_augment],
+                    )
                 )
-                self._init_reference_state.joint_vel[env_ids_to_augment] = self._symmetric_augment_joint_buffer(
-                    self._init_reference_state.joint_vel[env_ids_to_augment],
+                self._init_reference_state.joint_vel[env_ids_to_augment] = (
+                    self._symmetric_augment_joint_buffer(
+                        self._init_reference_state.joint_vel[env_ids_to_augment],
+                    )
                 )
                 self._init_reference_state.base_pos_w[env_ids_to_augment, 1] *= -1
-                self._init_reference_state.base_quat_w[env_ids_to_augment] = self._symmetric_augment_quat_buffer(
-                    self._init_reference_state.base_quat_w[env_ids_to_augment],
+                self._init_reference_state.base_quat_w[env_ids_to_augment] = (
+                    self._symmetric_augment_quat_buffer(
+                        self._init_reference_state.base_quat_w[env_ids_to_augment],
+                    )
                 )
                 self._init_reference_state.base_lin_vel_w[env_ids_to_augment, 1] *= -1
-                self._init_reference_state.base_ang_vel_w[env_ids_to_augment] = self._symmetric_augment_ang_vel_buffer(
-                    self._init_reference_state.base_ang_vel_w[env_ids_to_augment],
+                self._init_reference_state.base_ang_vel_w[env_ids_to_augment] = (
+                    self._symmetric_augment_ang_vel_buffer(
+                        self._init_reference_state.base_ang_vel_w[env_ids_to_augment],
+                    )
                 )
         return self._init_reference_state[env_ids]
 
-    def target_link_pose_forward_kinematics(self, joint_pos: torch.Tensor) -> torch.Tensor:
+    def target_link_pose_forward_kinematics(
+        self, joint_pos: torch.Tensor
+    ) -> torch.Tensor:
         """Considering the interested link of the motion reference is known from config, the forward kinematics output
         can be fixed to a series of link poses. This function is used to compute the target link poses from the joint
         positions (in isaacSim order).
@@ -420,41 +482,59 @@ class MotionReferenceManager(SensorBase):
         """
         input_device = joint_pos.device
         joint_pos = joint_pos.to(self.device)
-        all_link_poses = self._robot_kinematics_chain.forward_kinematics(joint_pos[:, self._joint_order_isaac_to_pk])
-        link_pos_quat_b = torch.zeros(joint_pos.shape[0], self.num_link_to_ref, 7, device=self.device)
+        all_link_poses = self._robot_kinematics_chain.forward_kinematics(
+            joint_pos[:, self._joint_order_isaac_to_pk]
+        )
+        link_pos_quat_b = torch.zeros(
+            joint_pos.shape[0], self.num_link_to_ref, 7, device=self.device
+        )
         for link_idx, link_name in enumerate(self.cfg.link_of_interests):
             pose_mat = all_link_poses[link_name].get_matrix().reshape(-1, 4, 4)
             link_pos_quat_b[:, link_idx, :3] = pose_mat[:, :3, 3]
-            link_pos_quat_b[:, link_idx, 3:] = math_utils.quat_from_matrix(pose_mat[:, :3, :3])
+            link_pos_quat_b[:, link_idx, 3:] = math_utils.quat_from_matrix(
+                pose_mat[:, :3, :3]
+            )
         return link_pos_quat_b.to(input_device)
 
-    def get_current_motion_identifiers(self, env_ids: Sequence[int] | torch.Tensor | None = None) -> list[str]:
+    def get_current_motion_identifiers(
+        self, env_ids: Sequence[int] | torch.Tensor | None = None
+    ) -> list[str]:
         """Get the current motion identifiers for the given env_ids."""
         if env_ids is None:
             env_ids = self.ALL_INDICES
         motion_identifiers = []
         for name, buffer in self._motion_buffers.items():
             env_ids_assignment = self._motion_buffer_assignment[name]
-            assert env_ids_assignment.step is None, "Only support continuous env_ids assignment for now."
+            assert env_ids_assignment.step is None, (
+                "Only support continuous env_ids assignment for now."
+            )
             env_ids_this_buffer_mask = torch.logical_and(
                 env_ids >= env_ids_assignment.start, env_ids < env_ids_assignment.stop
             )
-            motion_identifiers.extend(buffer.get_current_motion_identifiers(env_ids[env_ids_this_buffer_mask]))  # type: ignore
+            motion_identifiers.extend(
+                buffer.get_current_motion_identifiers(env_ids[env_ids_this_buffer_mask])
+            )  # type: ignore
         return motion_identifiers
 
-    def get_current_motion_weights(self, env_ids: Sequence[int] | torch.Tensor | None = None) -> torch.Tensor:
+    def get_current_motion_weights(
+        self, env_ids: Sequence[int] | torch.Tensor | None = None
+    ) -> torch.Tensor:
         """Get the current motion weights for the given env_ids."""
         if env_ids is None:
             env_ids = self.ALL_INDICES
-        motion_weights = torch.empty(len(env_ids), device=self.device, dtype=torch.float32)
+        motion_weights = torch.empty(
+            len(env_ids), device=self.device, dtype=torch.float32
+        )
         for name, buffer in self._motion_buffers.items():
             env_ids_assignment = self._motion_buffer_assignment[name]
-            assert env_ids_assignment.step is None, "Only support continuous env_ids assignment for now."
+            assert env_ids_assignment.step is None, (
+                "Only support continuous env_ids assignment for now."
+            )
             env_ids_this_buffer_mask = torch.logical_and(
                 env_ids >= env_ids_assignment.start, env_ids < env_ids_assignment.stop
             )
-            motion_weights[env_ids_this_buffer_mask] = buffer.get_current_motion_weights(
-                env_ids[env_ids_this_buffer_mask]
+            motion_weights[env_ids_this_buffer_mask] = (
+                buffer.get_current_motion_weights(env_ids[env_ids_this_buffer_mask])
             )  # type: ignore
         return motion_weights
 
@@ -469,12 +549,14 @@ class MotionReferenceManager(SensorBase):
             - multi processing is not recommended.
         """
         if isinstance(weight_ratio, torch.Tensor):
-            assert len(weight_ratio) == len(
-                env_ids
-            ), "weight_ratio must be a scalar or a tensor with the same length as env_ids."
+            assert len(weight_ratio) == len(env_ids), (
+                "weight_ratio must be a scalar or a tensor with the same length as env_ids."
+            )
         for name, buffer in self._motion_buffers.items():
             env_ids_assignment = self._motion_buffer_assignment[name]
-            assert env_ids_assignment.step is None, "Only support continuous env_ids assignment for now."
+            assert env_ids_assignment.step is None, (
+                "Only support continuous env_ids assignment for now."
+            )
             env_ids_this_buffer_mask = torch.logical_and(
                 env_ids >= env_ids_assignment.start, env_ids < env_ids_assignment.stop
             )
@@ -482,7 +564,9 @@ class MotionReferenceManager(SensorBase):
             buffer.update_motion_weights(
                 env_ids_this_buffer,
                 weight_ratio=(
-                    weight_ratio[env_ids_this_buffer_mask] if isinstance(weight_ratio, torch.Tensor) else weight_ratio
+                    weight_ratio[env_ids_this_buffer_mask]
+                    if isinstance(weight_ratio, torch.Tensor)
+                    else weight_ratio
                 ),
             )
 
@@ -515,13 +599,17 @@ class MotionReferenceManager(SensorBase):
         self._initialize_motion_buffers()
         self._resample_buffer_collate_params()
         self._resample_update_period()
-        print(self)  # print the tabular information of the motion reference managed buffer.
+        print(
+            self
+        )  # print the tabular information of the motion reference managed buffer.
 
     def _update_buffers_impl(self, env_ids: Sequence[int] | torch.Tensor):
         """Update the motion reference buffers for the given env_ids."""
         env_ids = torch.as_tensor(env_ids, device=self.device)
         # compute the time left to reach the specific frame
-        time_to_target_frame = torch.arange(self.cfg.num_frames, device=self.device, dtype=torch.float32)
+        time_to_target_frame = torch.arange(
+            self.cfg.num_frames, device=self.device, dtype=torch.float32
+        )
         if self.cfg.data_start_from == "one_frame_interval":
             time_to_target_frame += 1
         time_to_target_frame = time_to_target_frame.unsqueeze(0).repeat(len(env_ids), 1)
@@ -529,20 +617,25 @@ class MotionReferenceManager(SensorBase):
 
         for name, buffer in self._motion_buffers.items():
             env_ids_assignment = self._motion_buffer_assignment[name]
-            assert env_ids_assignment.step is None, "Only support continuous env_ids assignment for now."
+            assert env_ids_assignment.step is None, (
+                "Only support continuous env_ids assignment for now."
+            )
             env_ids_this_buffer_mask = torch.logical_and(
                 env_ids >= env_ids_assignment.start, env_ids < env_ids_assignment.stop
             )
             env_ids_this_buffer = env_ids[env_ids_this_buffer_mask]
             buffer.fill_motion_data(
                 env_ids_this_buffer,
-                self._timestamp[env_ids_this_buffer].unsqueeze(-1) + time_to_target_frame[env_ids_this_buffer_mask],
+                self._timestamp[env_ids_this_buffer].unsqueeze(-1)
+                + time_to_target_frame[env_ids_this_buffer_mask],
                 self.env_origins,
                 self._data,
             )
             # symmetric augment init reference state if needed
             if self._symmetric_augmentation_conditions_met:
-                env_ids_to_augment = env_ids_this_buffer[self._env_symmetric_augmentation_mask[env_ids_this_buffer]]
+                env_ids_to_augment = env_ids_this_buffer[
+                    self._env_symmetric_augmentation_mask[env_ids_this_buffer]
+                ]
                 self._symmetric_augment_reference_data(self._data, env_ids_to_augment)
         self._data.time_to_target_frame[env_ids] = time_to_target_frame
 
@@ -605,7 +698,9 @@ class MotionReferenceManager(SensorBase):
             **make_empty_data_kwargs,
         )
         # Add an additional timestamp to the reference frame data, which is used for lazy update of the reference frame.
-        self._reference_frame_timestamp = torch.zeros(self._view.count, device=self.device)
+        self._reference_frame_timestamp = torch.zeros(
+            self._view.count, device=self.device
+        )
 
         make_empty_state_kwargs = self._prepare_state_class_kwargs()
 
@@ -626,7 +721,9 @@ class MotionReferenceManager(SensorBase):
         (in case of multi-workers).
         """
         self._motion_buffers: dict[str, MotionBuffer] = dict()
-        assert len(self.cfg.motion_buffers) > 0, "At least one motion buffer should be specified."
+        assert len(self.cfg.motion_buffers) > 0, (
+            "At least one motion buffer should be specified."
+        )
         for motion_buffer_name, motion_buffer_cfg in self.cfg.motion_buffers.items():
             motion_buffer_cls: type[MotionBuffer] = motion_buffer_cfg.class_type
             self._motion_buffers[motion_buffer_name] = motion_buffer_cls(
@@ -652,10 +749,16 @@ class MotionReferenceManager(SensorBase):
 
     def _initialize_robot_kinematics(self):
         with open(self.cfg.robot_model_path) as f:
-            self._robot_kinematics_chain = pk.build_chain_from_urdf(f.read()).to(dtype=torch.float, device=self.device)
+            self._robot_kinematics_chain = pk.build_chain_from_urdf(f.read()).to(
+                dtype=torch.float, device=self.device
+            )
         # joint_pos_pk = joint_pos_isaac[_joint_order_isaac_to_pk]
-        self._joint_order_isaac_to_pk = torch.ones(self._view.max_dofs, device=self.device, dtype=torch.long) * -1
-        for joint_i, joint_name in enumerate(self._robot_kinematics_chain.get_joint_parameter_names()):
+        self._joint_order_isaac_to_pk = (
+            torch.ones(self._view.max_dofs, device=self.device, dtype=torch.long) * -1
+        )
+        for joint_i, joint_name in enumerate(
+            self._robot_kinematics_chain.get_joint_parameter_names()
+        ):
             if not joint_name in self.isaac_joint_names:
                 raise RuntimeError(
                     f"Joint name {joint_name} in the robot kinematics chain is not found in the physics simulation"
@@ -671,7 +774,9 @@ class MotionReferenceManager(SensorBase):
         """Reset each motion buffers if is selected by the given env_ids."""
         for name in self._motion_buffers.keys():
             env_ids_assignment = self._motion_buffer_assignment[name]
-            assert env_ids_assignment.step is None, "Only support continuous env_ids assignment for now."
+            assert env_ids_assignment.step is None, (
+                "Only support continuous env_ids assignment for now."
+            )
             env_ids_this_buffer_mask = torch.logical_and(
                 env_ids >= env_ids_assignment.start, env_ids < env_ids_assignment.stop
             )
@@ -685,7 +790,9 @@ class MotionReferenceManager(SensorBase):
         self._data.reset(env_ids)
         self._reference_frame.reset(env_ids)
 
-    def _resample_buffer_collate_params(self, env_ids: Sequence[int] | torch.Tensor | None = None):
+    def _resample_buffer_collate_params(
+        self, env_ids: Sequence[int] | torch.Tensor | None = None
+    ):
         """Resample values for motion collate behaviors for the given env_ids. E.g. frame_interval_s,
         symmetric_augmentation_mask.
         """
@@ -702,9 +809,16 @@ class MotionReferenceManager(SensorBase):
                 * (self.cfg.frame_interval_s[1] - self.cfg.frame_interval_s[0])
                 + self.cfg.frame_interval_s[0]
             )
-        elif (not hasattr(self, "_frame_interval_s")) and (not isinstance(self.cfg.frame_interval_s, Sequence)):
-            self._frame_interval_s = torch.ones(self._view.count, device=self.device) * self.cfg.frame_interval_s
-        elif hasattr(self, "_frame_interval_s") and (not isinstance(self.cfg.frame_interval_s, Sequence)):
+        elif (not hasattr(self, "_frame_interval_s")) and (
+            not isinstance(self.cfg.frame_interval_s, Sequence)
+        ):
+            self._frame_interval_s = (
+                torch.ones(self._view.count, device=self.device)
+                * self.cfg.frame_interval_s
+            )
+        elif hasattr(self, "_frame_interval_s") and (
+            not isinstance(self.cfg.frame_interval_s, Sequence)
+        ):
             pass
         else:
             raise ValueError("Invalid frame_interval_s configuration.")
@@ -713,9 +827,13 @@ class MotionReferenceManager(SensorBase):
         if env_ids is None or not hasattr(self, "_env_symmetric_augmentation_mask"):
             # Specifying whether the symmetric augmentation should be applied to the given env_ids.
             # The values in self._data should be already symmetrically augmented.
-            self._env_symmetric_augmentation_mask = torch.zeros(self._view.count, device=self.device, dtype=torch.bool)
+            self._env_symmetric_augmentation_mask = torch.zeros(
+                self._view.count, device=self.device, dtype=torch.bool
+            )
 
-    def _resample_update_period(self, env_ids: Sequence[int] | torch.Tensor | None = None):
+    def _resample_update_period(
+        self, env_ids: Sequence[int] | torch.Tensor | None = None
+    ):
         """Resample the update period for the given env_ids."""
         if env_ids is None and isinstance(self.cfg.update_period, (list, tuple)):
             # initialize the update period so that the sensor manager will update the sensor at the given period
@@ -730,31 +848,46 @@ class MotionReferenceManager(SensorBase):
             )
             env_ids = self._ALL_INDICES  # type: ignore
 
-        if isinstance(self.cfg.update_period, torch.Tensor) and self.cfg.update_period_sample_strategy is not None:
+        if (
+            isinstance(self.cfg.update_period, torch.Tensor)
+            and self.cfg.update_period_sample_strategy is not None
+        ):
             if self.cfg.update_period_sample_strategy == "uniform":
                 self.cfg.update_period[env_ids] = (
                     torch.rand(
                         len(env_ids),  # type: ignore
                         device=self.device,
                     )
-                    * (self.cfg.update_period_range[1] - self.cfg.update_period_range[0])
+                    * (
+                        self.cfg.update_period_range[1]
+                        - self.cfg.update_period_range[0]
+                    )
                     + self.cfg.update_period_range[0]
                 )  # type: ignore
             elif self.cfg.update_period_sample_strategy == "uniform_frame_limits":
                 # Currently, assuming sample frame indices are still linearly increasing.
-                max_motion_ref_length_s = self.frame_interval_s * self.cfg.num_frames  # (len(env_ids),)
+                max_motion_ref_length_s = (
+                    self.frame_interval_s * self.cfg.num_frames
+                )  # (len(env_ids),)
                 self.cfg.update_period[env_ids] = (
                     torch.rand(
                         len(env_ids),  # type: ignore
                         device=self.device,
                     )
-                    * (max_motion_ref_length_s[env_ids] - self.frame_interval_s[env_ids])
+                    * (
+                        max_motion_ref_length_s[env_ids]
+                        - self.frame_interval_s[env_ids]
+                    )
                     + self.frame_interval_s[env_ids]
                 )
             else:
-                raise ValueError(f"Unknown update_period_sample_strategy: {self.cfg.update_period_sample_strategy}")
+                raise ValueError(
+                    f"Unknown update_period_sample_strategy: {self.cfg.update_period_sample_strategy}"
+                )
 
-    def _assign_motion_trajectories_for_this_process(self, local_rank: int = 0, world_size: int | None = None):
+    def _assign_motion_trajectories_for_this_process(
+        self, local_rank: int = 0, world_size: int | None = None
+    ):
         """Assign the motion trajectories for the current process based on the rank_id/world_size.
         `self._motion_buffer_num_trajectories` will be updated. As for the current process, only a subset of
         trajectories will be enabled. Not-used motion buffer (python object) will be deleted.
@@ -781,7 +914,10 @@ class MotionReferenceManager(SensorBase):
             for buffer_name in list(self._motion_buffers.keys()):
                 buffer = self._motion_buffers[buffer_name]
                 buffer_traj_end = buffer.num_trajectories + buffer_traj_start
-                idxs_this_buffer = idxs[(idxs >= buffer_traj_start) & (idxs < buffer_traj_end)] - buffer_traj_start
+                idxs_this_buffer = (
+                    idxs[(idxs >= buffer_traj_start) & (idxs < buffer_traj_end)]
+                    - buffer_traj_start
+                )
                 if len(idxs_this_buffer) > 0:
                     buffer.enable_trajectories(idxs_this_buffer)
                 else:
@@ -797,16 +933,26 @@ class MotionReferenceManager(SensorBase):
             num_traj_per_process = total_traj_global // world_size
             process_traj_start = num_traj_per_process * local_rank
             process_traj_end = (
-                num_traj_per_process * (local_rank + 1) if local_rank < world_size - 1 else total_traj_global
+                num_traj_per_process * (local_rank + 1)
+                if local_rank < world_size - 1
+                else total_traj_global
             )
             buffer_traj_start = 0
             for buffer_name in list(self._motion_buffers.keys()):
                 buffer = self._motion_buffers[buffer_name]
                 buffer_traj_end = buffer.num_trajectories + buffer_traj_start
-                buffer_slice_start = np.clip(process_traj_start, buffer_traj_start, buffer_traj_end) - buffer_traj_start
-                buffer_slice_end = np.clip(process_traj_end, buffer_traj_start, buffer_traj_end) - buffer_traj_start
+                buffer_slice_start = (
+                    np.clip(process_traj_start, buffer_traj_start, buffer_traj_end)
+                    - buffer_traj_start
+                )
+                buffer_slice_end = (
+                    np.clip(process_traj_end, buffer_traj_start, buffer_traj_end)
+                    - buffer_traj_start
+                )
                 if buffer_slice_start < buffer_slice_end:
-                    buffer.enable_trajectories(slice(buffer_slice_start, buffer_slice_end))
+                    buffer.enable_trajectories(
+                        slice(buffer_slice_start, buffer_slice_end)
+                    )
                 else:
                     buffer = self._motion_buffers.pop(buffer_name)
                     del buffer
@@ -820,17 +966,26 @@ class MotionReferenceManager(SensorBase):
         """
         # compute the ratio of trajectories for each motion buffer and how many envs should be assigned to each buffer
         total_traj = sum(self._motion_buffer_num_trajectories.values())
-        traj_ratio_d = {name: num_traj / total_traj for name, num_traj in self._motion_buffer_num_trajectories.items()}
-        num_env_assignment_d = {name: int(ratio * self._view.count) for name, ratio in traj_ratio_d.items()}
+        traj_ratio_d = {
+            name: num_traj / total_traj
+            for name, num_traj in self._motion_buffer_num_trajectories.items()
+        }
+        num_env_assignment_d = {
+            name: int(ratio * self._view.count) for name, ratio in traj_ratio_d.items()
+        }
 
         # check if the assignment matches all envs, otherwise, slightly add/subtract from the largest/smallest
         if sum(num_env_assignment_d.values()) > self._view.count:
             overflow_num = sum(num_env_assignment_d.values()) - self._view.count
-            max_num_env_name = max(num_env_assignment_d.keys(), key=num_env_assignment_d.get)  # type: ignore
+            max_num_env_name = max(
+                num_env_assignment_d.keys(), key=num_env_assignment_d.get
+            )  # type: ignore
             num_env_assignment_d[max_num_env_name] -= overflow_num
         elif sum(num_env_assignment_d.values()) < self._view.count:
             underflow_num = self._view.count - sum(num_env_assignment_d.values())
-            min_num_env_name = min(num_env_assignment_d.keys(), key=num_env_assignment_d.get)  # type: ignore
+            min_num_env_name = min(
+                num_env_assignment_d.keys(), key=num_env_assignment_d.get
+            )  # type: ignore
             num_env_assignment_d[min_num_env_name] += underflow_num
 
         # assign the motion buffer for each envs
@@ -853,7 +1008,10 @@ class MotionReferenceManager(SensorBase):
         return (
             (self.cfg.symmetric_augmentation_joint_mapping is not None)
             and (self.cfg.symmetric_augmentation_joint_reverse_buf is not None)
-            and (self.num_link_to_ref == 0 or self.cfg.symmetric_augmentation_link_mapping is not None)
+            and (
+                self.num_link_to_ref == 0
+                or self.cfg.symmetric_augmentation_link_mapping is not None
+            )
             and self._env_symmetric_augmentation_mask.any()
         )
 
@@ -862,11 +1020,16 @@ class MotionReferenceManager(SensorBase):
         Assuming the last dimension is the joint dimension.
         """
         num_dims = len(joint_pos_buf.shape)
-        joint_reverse_buf = torch.tensor(self.cfg.symmetric_augmentation_joint_reverse_buf, device=self.device)
+        joint_reverse_buf = torch.tensor(
+            self.cfg.symmetric_augmentation_joint_reverse_buf, device=self.device
+        )
         if num_dims > 1:
             for _ in range(num_dims - 1):
                 joint_reverse_buf = joint_reverse_buf.unsqueeze(0)
-        joint_pos_buf[..., :] = joint_pos_buf[..., self.cfg.symmetric_augmentation_joint_mapping] * joint_reverse_buf
+        joint_pos_buf[..., :] = (
+            joint_pos_buf[..., self.cfg.symmetric_augmentation_joint_mapping]
+            * joint_reverse_buf
+        )
         return joint_pos_buf
 
     def _symmetric_augment_ang_vel_buffer(self, ang_vel_buf: torch.Tensor):
@@ -882,7 +1045,9 @@ class MotionReferenceManager(SensorBase):
         """Symmetrically augment the link position/rotation buffer w.r.t x-z plane, values changed in place.
         Assuming the last dimension is the position dimension, the second last dimension is the link dimension.
         """
-        link_pos_buf[:] = link_pos_buf[..., self.cfg.symmetric_augmentation_link_mapping, :]
+        link_pos_buf[:] = link_pos_buf[
+            ..., self.cfg.symmetric_augmentation_link_mapping, :
+        ]
         link_pos_buf[..., 1] *= -1
         return link_pos_buf
 
@@ -892,7 +1057,9 @@ class MotionReferenceManager(SensorBase):
         """
         # mirror the quaternion w.r.t x-z plane
         # from https://stackoverflow.com/questions/32438252/efficient-way-to-apply-mirror-effect-on-quaternion-rotation
-        link_quat_buf[:] = link_quat_buf[..., self.cfg.symmetric_augmentation_link_mapping, :]
+        link_quat_buf[:] = link_quat_buf[
+            ..., self.cfg.symmetric_augmentation_link_mapping, :
+        ]
         link_quat_buf[..., 1] *= -1
         link_quat_buf[..., 3] *= -1
         return link_quat_buf
@@ -906,7 +1073,9 @@ class MotionReferenceManager(SensorBase):
         quat_buf[..., 3] *= -1
         return quat_buf
 
-    def _symmetric_augment_reference_data(self, data_buf: MotionReferenceData, env_ids: torch.Tensor | slice):
+    def _symmetric_augment_reference_data(
+        self, data_buf: MotionReferenceData, env_ids: torch.Tensor | slice
+    ):
         """Symmetrically augment all parts of the reference data buffer w.r.t x-z plane, values changed in place."""
         data_buf.joint_pos[env_ids] = self._symmetric_augment_joint_buffer(
             data_buf.joint_pos[env_ids],
@@ -965,7 +1134,9 @@ class MotionReferenceManager(SensorBase):
         """Set the articulation view to the reference state for motion visualization."""
         if self.cfg.visualizing_robot_from == "aiming_frame":
             aiming_frame_idx = self.aiming_frame_idx
-            robot_pos_w = self.data.base_pos_w[self.ALL_INDICES, aiming_frame_idx].clone()
+            robot_pos_w = self.data.base_pos_w[
+                self.ALL_INDICES, aiming_frame_idx
+            ].clone()
             robot_quat_w_ = self.data.base_quat_w[self.ALL_INDICES, aiming_frame_idx]
             robot_quat_w = math_utils.convert_quat(robot_quat_w_, to="xyzw")
             robot_joint_pos = self.data.joint_pos[self.ALL_INDICES, aiming_frame_idx]
@@ -975,7 +1146,9 @@ class MotionReferenceManager(SensorBase):
             robot_quat_w = math_utils.convert_quat(robot_quat_w_, to="xyzw")
             robot_joint_pos = self.data.joint_pos[self.ALL_INDICES, 0]
         else:
-            raise ValueError(f"Unsupported cfg.visualizing_robot_from: {self.cfg.visualizing_robot_from}")
+            raise ValueError(
+                f"Unsupported cfg.visualizing_robot_from: {self.cfg.visualizing_robot_from}"
+            )
 
         # add position offset in case the reference is overlapping with the real robot.
         robot_pos_w[:, 0] += self.cfg.visualizing_robot_offset[0]
@@ -1025,28 +1198,66 @@ class MotionReferenceManager(SensorBase):
             quat_list = []
             index_list = []
 
-            if "root" in self.cfg.visualizing_marker_types:
-                root_pos_w = self.data.base_pos_w[self.ALL_INDICES, aiming_frame_idx]
-                root_quat_w = self.data.base_quat_w[self.ALL_INDICES, aiming_frame_idx]
-                root_indices = torch.ones(self._view.count, device=self.device, dtype=torch.long) * 0
+            if self.cfg.visualizing_robot_from == "reference_frame":
+                visualized_root_pos_w = self.reference_frame.base_pos_w[
+                    self.ALL_INDICES, 0
+                ]
+                visualized_root_quat_w = self.reference_frame.base_quat_w[
+                    self.ALL_INDICES, 0
+                ]
+                visualized_link_pos_w = self.reference_frame.link_pos_w[
+                    self.ALL_INDICES, 0
+                ]
+                visualized_link_quat_w = self.reference_frame.link_quat_w[
+                    self.ALL_INDICES, 0
+                ]
+            else:
+                visualized_root_pos_w = self.data.base_pos_w[
+                    self.ALL_INDICES, aiming_frame_idx
+                ]
+                visualized_root_quat_w = self.data.base_quat_w[
+                    self.ALL_INDICES, aiming_frame_idx
+                ]
+                visualized_link_pos_w = self.data.link_pos_w[
+                    self.ALL_INDICES, aiming_frame_idx
+                ]
+                visualized_link_quat_w = self.data.link_quat_w[
+                    self.ALL_INDICES, aiming_frame_idx
+                ]
 
-                pos_list.append(root_pos_w.reshape(-1, 3))
-                quat_list.append(root_quat_w.reshape(-1, 4))
+            if "root" in self.cfg.visualizing_marker_types:
+                root_indices = (
+                    torch.ones(self._view.count, device=self.device, dtype=torch.long)
+                    * 0
+                )
+
+                pos_list.append(visualized_root_pos_w.reshape(-1, 3))
+                quat_list.append(visualized_root_quat_w.reshape(-1, 4))
                 index_list.append(root_indices.reshape(-1))
 
             if "links" in self.cfg.visualizing_marker_types:
-                link_pos_w = self.data.link_pos_w[self.ALL_INDICES, aiming_frame_idx]
-                link_quat_w = self.data.link_quat_w[self.ALL_INDICES, aiming_frame_idx]
-                link_indices = torch.ones(link_pos_w.shape[:2], device=self.device, dtype=torch.long) * 1
+                link_indices = (
+                    torch.ones(
+                        visualized_link_pos_w.shape[:2],
+                        device=self.device,
+                        dtype=torch.long,
+                    )
+                    * 1
+                )
 
-                pos_list.append(link_pos_w.reshape(-1, 3))
-                quat_list.append(link_quat_w.reshape(-1, 4))
+                pos_list.append(visualized_link_pos_w.reshape(-1, 3))
+                quat_list.append(visualized_link_quat_w.reshape(-1, 4))
                 index_list.append(link_indices.reshape(-1))
 
             if "relative_links" in self.cfg.visualizing_marker_types:
                 link_pos_w = self.reference_link_pos_relative_w
                 link_quat_w = self.reference_link_quat_relative_w
-                link_indices = torch.ones(link_pos_w.shape[:2], device=self.device, dtype=torch.long) * 2
+                link_indices = (
+                    torch.ones(
+                        link_pos_w.shape[:2], device=self.device, dtype=torch.long
+                    )
+                    * 2
+                )
 
                 pos_list.append(link_pos_w.reshape(-1, 3))
                 quat_list.append(link_quat_w.reshape(-1, 4))
