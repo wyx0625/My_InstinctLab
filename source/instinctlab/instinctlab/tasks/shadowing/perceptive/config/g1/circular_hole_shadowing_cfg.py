@@ -5,6 +5,8 @@ import os
 
 import yaml
 from isaaclab.envs import ViewerCfg
+from isaaclab.managers import CurriculumTermCfg
+from isaaclab.managers import RewardTermCfg as RewTermCfg
 from isaaclab.managers import TerminationTermCfg as DoneTermCfg
 from isaaclab.sensors import ContactSensorCfg
 from isaaclab.sensors.ray_caster import MultiMeshRayCasterCfg
@@ -70,11 +72,11 @@ class CircularHoleMotionCfg(AmassMotionCfgBase):
     ensure_link_below_zero_ground = False
     motion_start_from_middle_range = (0.0, 0.0)
     motion_start_height_offset = 0.0
-    motion_bin_length_s = None
+    motion_bin_length_s = 1.0
     buffer_device = "output_device"
     motion_interpolate_func = motion_interpolate_bilinear
     velocity_estimation_method = "frontbackward"
-    env_starting_stub_sampling_strategy = "independent"
+    env_starting_stub_sampling_strategy = "concat_motion_bins"
 
 
 circular_hole_motion_reference_cfg = perceptive_motion_reference_cfg.replace(
@@ -154,12 +156,10 @@ class G1CircularHoleShadowingEnvCfg(perceptual_cfg.PerceptiveShadowingEnvCfg):
             "asset_cfg"
         ].body_names = self.scene.motion_reference.link_of_interests
 
-        self.curriculum.beyond_adaptive_sampling = None
-        self.events.bin_fail_counter_smoothing = None
         self.events.push_robot = None
         self.events.reset_robot.params["randomize_pose_range"] = {
-            "x": (-0.10, 0.10),
-            "y": (-0.05, 0.05),
+            "x": (-0.15, 0.15),
+            "y": (-0.15, 0.15),
             "z": (0.0, 0.0),
             "roll": (0.0, 0.0),
             "pitch": (0.0, 0.0),
@@ -178,7 +178,7 @@ class G1CircularHoleShadowingEnvCfg(perceptual_cfg.PerceptiveShadowingEnvCfg):
                         filter_prim_paths_expr=[
                             "{ENV_REGEX_NS}/CircularHoleObstacle/geometry/collision"
                         ],
-                        history_length=1,
+                        history_length=4,
                         track_contact_points=False,
                         max_contact_data_count_per_prim=32,
                     ),
@@ -187,11 +187,29 @@ class G1CircularHoleShadowingEnvCfg(perceptual_cfg.PerceptiveShadowingEnvCfg):
                 func=shadowing_mdp.obstacle_contact,
                 params={
                     "sensor_names": obstacle_contact_sensor_names,
+                    "threshold": 50.0,
+                },
+            )
+            self.rewards.rewards.obstacle_contact = RewTermCfg(
+                func=shadowing_mdp.obstacle_contact_penalty,
+                weight=-2.0,
+                params={
+                    "sensor_names": obstacle_contact_sensor_names,
                     "threshold": 1.0,
                 },
             )
+            self.curriculum.obstacle_contact_threshold = CurriculumTermCfg(
+                func=shadowing_mdp.obstacle_contact_threshold,
+                params={
+                    "term_name": "obstacle_contact",
+                    "initial_threshold": 50.0,
+                    "final_threshold": 1.0,
+                    "start_step": 0,
+                    "end_step": 25000,
+                },
+            )
         self.terminations.out_of_border = None
-        self.run_name = "g1CircularHole_singleMotion_depth_initialPoseRandomization"
+        self.run_name = "g1CircularHole_singleMotion_depth_officialXY15_yaw5"
 
 
 @configclass
@@ -217,6 +235,14 @@ class G1CircularHoleShadowingEnvCfg_PLAY(G1CircularHoleShadowingEnvCfg):
 
     def __post_init__(self):
         super().__post_init__()
+
+        self.curriculum.beyond_adaptive_sampling = None
+        self.curriculum.obstacle_contact_threshold = None
+        self.events.bin_fail_counter_smoothing = None
+        motion_cfg = self.scene.motion_reference.motion_buffers["CircularHoleMotion"]
+        motion_cfg.motion_start_from_middle_range = (0.0, 0.0)
+        motion_cfg.motion_bin_length_s = None
+        motion_cfg.env_starting_stub_sampling_strategy = "independent"
 
         self.events.add_joint_default_pos = None
         self.events.base_com = None

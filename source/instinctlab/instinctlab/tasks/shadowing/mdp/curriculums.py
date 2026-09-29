@@ -1,15 +1,14 @@
 from __future__ import annotations
 
-import torch
 from collections.abc import Sequence
 from typing import TYPE_CHECKING, Literal
 
+import torch
 from isaaclab.managers.manager_base import ManagerTermBase
 
 if TYPE_CHECKING:
     from isaaclab.envs import ManagerBasedRLEnv
     from isaaclab.managers import CurriculumTermCfg
-    from isaaclab.motion_reference.motion_files.amass_motion import AmassMotion
 
     from instinctlab.motion_reference import MotionReferenceManager
 
@@ -35,8 +34,12 @@ def update_motion_reference_weight(
         weight_ratio=1.0 / success_weight_ratio,
     )
     return {
-        "timeout_ratio": len(timeout_env_ids) / len(env_ids) if len(env_ids) > 0 else 0.0,
-        "terminated_ratio": len(terminated_env_ids) / len(env_ids) if len(env_ids) > 0 else 0.0,
+        "timeout_ratio": len(timeout_env_ids) / len(env_ids)
+        if len(env_ids) > 0
+        else 0.0,
+        "terminated_ratio": len(terminated_env_ids) / len(env_ids)
+        if len(env_ids) > 0
+        else 0.0,
     }
 
 
@@ -52,7 +55,9 @@ def update_motion_reference_weights_by_progress(
     motion_reference: MotionReferenceManager = env.scene[reference_name]
     current_weights = motion_reference.get_current_motion_weights(env_ids)
     weight_sum = current_weights.sum()
-    progress = (env.episode_length_buf * env.step_dt)[env_ids] / motion_reference.assigned_motion_lengths[env_ids]
+    progress = (env.episode_length_buf * env.step_dt)[
+        env_ids
+    ] / motion_reference.assigned_motion_lengths[env_ids]
 
     # normalize the ratio to make the weight sum remain the same
     # make the env with less progress have higher weight
@@ -80,7 +85,9 @@ class update_motion_reference_weights_by_delayed_stats(ManagerTermBase):
         super().__init__(cfg, env)
         self.delayed_progress = cfg.params.get("init_delayed_progress", 0.0)
         self.experience_length = cfg.params.get("init_experience_length", 0.0)
-        self.motion_reference: MotionReferenceManager = env.scene[cfg.params.get("reference_name", "motion_reference")]
+        self.motion_reference: MotionReferenceManager = env.scene[
+            cfg.params.get("reference_name", "motion_reference")
+        ]
 
     def __call__(
         self,
@@ -103,22 +110,30 @@ class update_motion_reference_weights_by_delayed_stats(ManagerTermBase):
         self.experience_length = (
             1 - length_refresh_epsilon
         ) * self.experience_length + length_refresh_epsilon * experience_length.mean()
-        progress = experience_length / self.motion_reference.assigned_motion_lengths[env_ids]
+        progress = (
+            experience_length / self.motion_reference.assigned_motion_lengths[env_ids]
+        )
         self.delayed_progress = (
             1 - progress_refresh_epsilon
         ) * self.delayed_progress + progress_refresh_epsilon * progress.mean()
 
         # compute and normalize the weight ratio
-        weight_ratio = (1.0 - progress) / torch.sqrt(torch.clamp(experience_length, min=1e-6))
+        weight_ratio = (1.0 - progress) / torch.sqrt(
+            torch.clamp(experience_length, min=1e-6)
+        )
         if ratio_option == "div_mean":
-            weight_ratio /= (1 - self.delayed_progress) / torch.sqrt(self.experience_length)
+            weight_ratio /= (1 - self.delayed_progress) / torch.sqrt(
+                self.experience_length
+            )
         elif ratio_option == "div_sum":
             weight_ratio /= weight_ratio.sum()
         else:
             raise ValueError(f"Unknown ratio option: {ratio_option}")
 
         # update the motion reference weights
-        assert len(env_ids) == len(weight_ratio), "env_ids and weight_ratio must have the same length"
+        assert len(env_ids) == len(weight_ratio), (
+            "env_ids and weight_ratio must have the same length"
+        )
         self.motion_reference.update_motion_weights(
             env_ids,
             weight_ratio=weight_ratio,
@@ -155,12 +170,15 @@ def update_motion_reference_weights_by_experience(
         return None
     experience_length = (env.episode_length_buf * env.step_dt)[env_ids]
     full_trajectory_env_ids_mask = (
-        experience_length / motion_reference.complete_motion_lengths[env_ids] > full_trajectory_threshold
+        experience_length / motion_reference.complete_motion_lengths[env_ids]
+        > full_trajectory_threshold
     )
 
     timeout_env_ids = env_ids[env.reset_time_outs[env_ids]]
 
-    full_trajectory_env_ids = env_ids[full_trajectory_env_ids_mask & env.reset_time_outs[env_ids]]
+    full_trajectory_env_ids = env_ids[
+        full_trajectory_env_ids_mask & env.reset_time_outs[env_ids]
+    ]
 
     if len(timeout_env_ids) > 0 and success_weight_ratio < 1.0:
         motion_reference.update_motion_weights(
@@ -179,6 +197,35 @@ def update_motion_reference_weights_by_experience(
         )
 
     return {
-        "timeout_ratio": len(timeout_env_ids) / len(env_ids) if len(env_ids) > 0 else 0.0,
-        "sampled_ratio": (len(env_ids) - len(timeout_env_ids)) / len(env_ids) if len(env_ids) > 0 else 0.0,
+        "timeout_ratio": len(timeout_env_ids) / len(env_ids)
+        if len(env_ids) > 0
+        else 0.0,
+        "sampled_ratio": (len(env_ids) - len(timeout_env_ids)) / len(env_ids)
+        if len(env_ids) > 0
+        else 0.0,
     }
+
+
+def obstacle_contact_threshold(
+    env: ManagerBasedRLEnv,
+    env_ids: Sequence[int],
+    term_name: str = "obstacle_contact",
+    initial_threshold: float = 50.0,
+    final_threshold: float = 1.0,
+    start_step: int = 0,
+    end_step: int = 25000,
+) -> dict[str, float]:
+    """Linearly tighten the obstacle-contact termination threshold during training."""
+    del env_ids
+    if end_step <= start_step:
+        progress = 1.0
+    else:
+        progress = min(
+            max((env.common_step_counter - start_step) / (end_step - start_step), 0.0),
+            1.0,
+        )
+    threshold = initial_threshold + progress * (final_threshold - initial_threshold)
+    term_cfg = env.termination_manager.get_term_cfg(term_name)
+    term_cfg.params["threshold"] = threshold
+    env.termination_manager.set_term_cfg(term_name, term_cfg)
+    return {"threshold": threshold, "progress": progress}
